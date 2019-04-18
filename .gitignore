@@ -4,6 +4,7 @@ env
 venv
 
 # python
+__pycache__
 .pytest_cahce
 *egg-info*
 build

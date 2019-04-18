@@ -1,6 +1,7 @@
 cryptography
 pytest
 pytest-mock
+pytest-cov
 assertpy
 nameko
 jupyter
