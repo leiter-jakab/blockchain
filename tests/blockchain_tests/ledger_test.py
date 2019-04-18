@@ -33,6 +33,7 @@ def test_new_block():
     assert_that(block.nonce).is_none()
 
 
+@pytest.mark.skip
 def test_add_transactions(root_block, good_transaction):
     block = TransactionBlock.new_block(previous_block=root_block)
     block = block.add_transaction(good_transaction)
