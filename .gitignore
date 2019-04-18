@@ -1,0 +1,10 @@
+# virtual env and IDE
+.idea
+env
+venv
+
+# python
+.pytest_cahce
+*egg-info*
+build
+dist
