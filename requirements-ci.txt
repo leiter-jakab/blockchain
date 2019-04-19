@@ -1,0 +1,6 @@
+cryptography
+nameko
+pytest
+pytest-mock
+pytest-cov
+assertpy
