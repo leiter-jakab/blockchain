@@ -5,10 +5,14 @@ venv
 
 # python
 __pycache__
-.pytest_cahce
 *egg-info*
 build
 dist
+
+# testing
+.pytest_cahce
+.coverage
+junit
 
 # jupyter
 .ipynb_checkpoints
