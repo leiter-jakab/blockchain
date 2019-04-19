@@ -24,4 +24,5 @@ steps:
   displayName: 'Test with pytest'
 - task: PublishTestResults@2
   inputs:
-    testResultsFiles: '**/test-resutls.xml'
+    testResultsFiles: '**/test-*.xml'
+    testRunTitle: 'Publish test results for Python $(python.version)'
