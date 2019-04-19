@@ -24,4 +24,4 @@ steps:
   displayName: 'Test with pytest'
 - task: PublishTestResults@2
   inputs:
-    testResultsFiles: 'junit/test-resutls.xml'
+    testResultsFiles: '**/test-resutls.xml'
