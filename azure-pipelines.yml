@@ -22,3 +22,6 @@ steps:
   displayName: 'Install SUT'
 - script: pytest tests --doctest-modules --junitxml=junit/test-results.xml --cov=com --cov-report=xml --cov-report=html
   displayName: 'Test with pytest'
+- task: PublishTestResults@2
+  inputs:
+    testResultsFiles: 'junit/test-resutls.xml'
