@@ -13,7 +13,7 @@ def root_block():
 @pytest.fixture()
 def chain(root_block):
     chain = [root_block]
-    for i in range(1, 10):
+    for i in range(1, 3):
         chain.append(Block.new_block(i, chain[i-1]))
     return chain
 
@@ -41,13 +41,19 @@ def test_verify_first_block(root_block):
     assert_that(block.verify()).is_equal_to(True)
 
 
-@pytest.mark.skip
 def test_verify_chain(chain):
-    for block in chain:
+    for block in chain[1:]:
         assert_that(block.verify()).is_equal_to(True)
 
 
-def test_catch_tampering(chain):
-    bad_block = chain[4]
-    bad_block = replace(bad_block, data='hacked')
-    assert_that(bad_block.verify()).is_equal_to(True)
+def test_detect_data_tampering(chain):
+    chain[1] = replace(chain[1], data='hacked')
+    chain[2] = replace(chain[2], previous_block=chain[1])
+    assert_that(chain[2].verify()).is_equal_to(False)
+
+
+def test_detect_block_insertion(chain):
+    last_block = Block.new_block('last', chain[2])
+    insert_block = Block.new_block('insert', chain[1])
+    last_block = replace(last_block, previous_block=Block.new_block(chain[2].data, insert_block))
+    assert_that(last_block.verify()).is_equal_to(False)
