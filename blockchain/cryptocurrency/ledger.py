@@ -21,8 +21,8 @@ class TransactionBlock(Block):
             cls,
             data: Tuple[Transaction] = (),
             previous_block: Optional[TransactionBlock] = None) -> TransactionBlock:
-        block = super().new_block(data, previous_block)
-        return cls(data, previous_block, block.previous_hash)
+        previous_hash = previous_block.compute_hash() if previous_block else b''
+        return cls(data, previous_block, previous_hash)
 
     def add_transaction(self, transaction: Transaction) -> TransactionBlock:
         return replace(self, data=self.data + (transaction,))
@@ -45,5 +45,6 @@ class TransactionBlock(Block):
             for tra in self.data:
                 tr, status, msg = tra.verify()
                 if status != VERIFIED:
-                    return self.data, status, 'transaction block verified'
+                    return self.data, status, msg
+            return self.data, VERIFIED, 'transaction block verified'
         return self.data, BLOCK_HASH_ERROR, 'previous block and hash not consistent'

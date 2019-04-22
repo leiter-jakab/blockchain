@@ -23,19 +23,21 @@ def root_block(good_transaction):
     return root_block
 
 
-def test_new_block():
-    block = TransactionBlock.new_block()
-    assert_that(block).is_type_of(TransactionBlock)
-    assert_that(block).is_not_none()
-    assert_that(block).has_data(())
-    assert_that(block.previous_block).is_none()
-    assert_that(block.previous_hash).is_equal_to(b'')
-    assert_that(block.nonce).is_none()
+class TestNewBlock:
+    def test_new_block(self):
+        block = TransactionBlock.new_block()
+        assert_that(block).is_type_of(TransactionBlock)
+        assert_that(block).is_not_none()
+        assert_that(block).has_data(())
+        assert_that(block.previous_block).is_none()
+        assert_that(block.previous_hash).is_equal_to(b'')
+        assert_that(block.nonce).is_none()
 
 
-@pytest.mark.skip
-def test_add_transactions(root_block, good_transaction):
-    block = TransactionBlock.new_block(previous_block=root_block)
-    block = block.add_transaction(good_transaction)
-    assert_that(block.data).is_type_of(tuple)
-    assert_that(block.verify()).contains(VERIFIED)
+class TestAddTransaction:
+    def test_add_transactions(self, root_block, good_transaction):
+        block = TransactionBlock.new_block(previous_block=root_block)
+        block = block.add_transaction(good_transaction)
+        assert_that(block.data).is_type_of(tuple)
+        assert_that(block.previous_hash).is_equal_to(block.previous_block.compute_hash())
+        assert_that(block.verify()).contains(VERIFIED)
