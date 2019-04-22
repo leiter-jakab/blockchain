@@ -1,6 +1,6 @@
 import pytest
 from assertpy import assert_that
-from blockchain.cryptocurrency.ledger import TransactionBlock
+from blockchain.cryptocurrency.ledger import TransactionBlock, BLOCK_DATA_ERROR
 from blockchain.cryptocurrency.transaction import VERIFIED, SIGNING_ERROR
 
 
@@ -15,6 +15,7 @@ def good_transaction(mocker):
 def bad_transaction(mocker):
     tr = mocker.Mock()
     tr.verify.return_value = tr, SIGNING_ERROR, 'message'
+    return tr
 
 
 @pytest.fixture()
@@ -78,3 +79,22 @@ class TestAddTransactions:
         block = TransactionBlock.new_block(('trx1', 'trx2'), root_block)
         block = block.add_transactions(('trx3',))
         assert_that(block).has_data(('trx1', 'trx2', 'trx3'))
+
+
+class TestVerify:
+    def test_verify_block_with_valid_transaction(self, root_block, good_transaction):
+        block = TransactionBlock.new_block((good_transaction,), root_block)
+        assert_that(block.verify()).contains(VERIFIED)
+
+    def test_verify_block_with_valid_transactions(self, root_block, good_transaction):
+        block = TransactionBlock.new_block((good_transaction, good_transaction, good_transaction), root_block)
+        assert_that(block.verify()).contains(VERIFIED)
+
+    def test_detect_bad_transaction(self, root_block, good_transaction, bad_transaction):
+        block = TransactionBlock.new_block((good_transaction, bad_transaction, good_transaction), root_block)
+        assert_that(block.verify()).contains(SIGNING_ERROR)
+
+    def test_detect_empty_block(self, root_block):
+        block = TransactionBlock.new_block(previous_block=root_block)
+        assert_that(block.verify()).contains(BLOCK_DATA_ERROR)
+
