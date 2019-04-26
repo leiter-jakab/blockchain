@@ -7,11 +7,16 @@ if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric import rsa
 
 T = TypeVar('T')
+
+# generic signature constants
+SIGNATURE_OK = 'SIGNATURE_OK'
+SIGNATURE_NOK = 'SIGNATURE_NOK'
+
+# networking constants
+TOPIC_NETWORK_EVENT = 'TOPIC_NETWORK_EVENT'
 NETWORK_EVENT_CONNECT = 'NETWORK_EVENT_CONNECT'
 NETWORK_EVENT_DISCONNECT = 'NETWORK_EVENT_DISCONNECT'
 NETWORK_EVENT_KEEP_ALIVE = 'NETWORK_EVENT_KEEP_ALIVE'
-SIGNATURE_OK = 'SIGNATURE_OK'
-SIGNATURE_NOK = 'SIGNATURE_NOK'
 
 
 class Block(NamedTuple):
@@ -47,7 +52,7 @@ class Block(NamedTuple):
 
 class DataObject(NamedTuple):
     payload: T
-    data_type = 'TYPE_GENERIC'
+    topic: str
 
     def compute_hash(self):
         return NotImplemented
@@ -57,7 +62,7 @@ class DataObject(NamedTuple):
 
     def as_dict(self) -> Dict[str, str]:
         return {
-            'type': self.data_type,
+            'topic': self.topic,
             'payload': self.payload_as_dict()
         }
 
@@ -69,7 +74,7 @@ class DataObject(NamedTuple):
 
     @classmethod
     def from_dict(cls, as_dict: Dict) -> DataObject:
-        block = cls(payload=cls.payload_from_dict(as_dict['payload']), data_type=as_dict['data_type'])
+        block = cls(payload=cls.payload_from_dict(as_dict['payload']), topic=as_dict['topic'])
         return block
 
     @staticmethod
@@ -84,7 +89,7 @@ class DataObject(NamedTuple):
 
 class NetworkEvent(DataObject):
     payload: Dict[str, str]
-    data_type: str
+    topic: str = TOPIC_NETWORK_EVENT
 
     @classmethod
     def new_network_event(cls,
@@ -97,10 +102,11 @@ class NetworkEvent(DataObject):
             'public_key': public_key,
             'host': host,
             'port': port,
+            'event_type': event_type,
             'timestamp': str(time.time()),
             'signature': str(signature.sign(public_key + host + port, private_key), 'utf8')
         }
-        return cls(payload, event_type)
+        return cls(payload)
 
     @classmethod
     def new_connect_event(cls,
@@ -129,7 +135,7 @@ class NetworkEvent(DataObject):
     def verify(self):
         pub_key = self.payload['public_key']
         sig = self.payload['signature']
-        msg = pub_key + self.payload['host'] + self.payload['port'] + self.payload['timestamp']
+        msg = pub_key + self.payload['host'] + self.payload['port'] + self.payload['timestamp'] + self.payload['event_type']
         if signature.verify(msg, bytes(sig, 'utf8'), pub_key):
             return VerificationSuccess(result_code=SIGNATURE_OK, message='signature matches key-pair')
         return VerificationFailed(result_code=SIGNATURE_NOK, message='signature does not match key-pair')
@@ -146,6 +152,8 @@ class NetworkEvent(DataObject):
             'public_key': payload['public_key'],
             'host': payload['host'],
             'port': payload['port'],
+            'event_type': payload['event_type'],
+            'timestamp': payload['timestamp'],
             'signature': payload['signature']
         }
 
