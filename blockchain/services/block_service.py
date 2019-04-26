@@ -5,5 +5,9 @@ class BlockService:
     name = 'block_service'
 
     @rpc
-    def new_transaction_block(self, transactions):
+    def verify_block(self, block_address, block_hash):
+        pass
+
+    @rpc
+    def get_block(self, block_address):
         pass
