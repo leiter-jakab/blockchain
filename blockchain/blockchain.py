@@ -1,41 +1,26 @@
 from __future__ import annotations
+import time
 import json
-# from dataclasses import dataclass
-from typing import Any, Optional, Dict, NamedTuple, TypeVar
+from typing import Optional, Tuple, Dict, NamedTuple, TypeVar, TYPE_CHECKING
 from . import signature
+if TYPE_CHECKING:
+    from cryptography.hazmat.primitives.asymmetric import rsa
 
+T = TypeVar('T')
+NETWORK_EVENT_CONNECT = 'NETWORK_EVENT_CONNECT'
+NETWORK_EVENT_DISCONNECT = 'NETWORK_EVENT_DISCONNECT'
+NETWORK_EVENT_KEEP_ALIVE = 'NETWORK_EVENT_KEEP_ALIVE'
+SIGNATURE_OK = 'SIGNATURE_OK'
+SIGNATURE_NOK = 'SIGNATURE_NOK'
 
-# @dataclass(frozen=True)
-# class Block:
-#     data: Optional[Any]
-#     previous_block: Optional[bytes]
-#     previous_hash: Optional[bytes]
-#
-#     @classmethod
-#     def new_block(cls, data: Any, previous_block: Optional[bytes] = None) -> Block:
-#         previous_hash = previous_block.compute_hash() if previous_block else b''
-#         return cls(data, previous_block, previous_hash)
-#
-#     def verify(self) -> bool:
-#         return self.previous_hash == self.previous_block.compute_hash()
-#
-#     def compute_hash(self) -> bytes:
-#         if hasattr(self.data, 'compute_hash'):
-#             data_hash = self.data.compute_hash()
-#         else:
-#             data_hash = signature.compute_hash(self.data)
-#         return signature.compute_hash(data_hash + self.previous_hash)
-#
-#     def __repr__(self):
-#         return f'Block.new_block({self.data}, previous_block)'
 
 class Block(NamedTuple):
-    data: BlockData
+    data: Tuple[DataObject, ...]
     previous_block_hash: bytes
     nonce: bytes = None
 
     @classmethod
-    def new_block(cls, data: BlockData, previous_block: Optional[Block]) -> Block:
+    def new_block(cls, data: Tuple[DataObject, ...], previous_block: Optional[Block]) -> Block:
         if data:
             prev_block_hash = previous_block.compute_hash() if previous_block else b''
             return cls(data, prev_block_hash)
@@ -43,28 +28,32 @@ class Block(NamedTuple):
 
     def as_dict(self) -> Dict[str, str]:
         return {
-            'data': self.data.as_dict(),
+            'data': [db.as_dict() for db in self.data],
             'previous_block_hash': str(self.previous_block_hash, 'utf8'),
             'nonce': str(self.nonce, 'utf8')
         }
 
-    def as_json(self, data_as_dict) -> str:
-        return json.dumps(self.as_dict(data_as_dict))
+    def as_json(self) -> str:
+        return json.dumps(self.as_dict())
 
     def compute_hash(self) -> bytes:
-        return signature.compute_hash(self.data.compute_hash() + self.previous_block_hash)
+        data_hash = b''.join([db.compute_hash() for db in self.data])
+        return signature.compute_hash(data_hash + self.previous_block_hash)
 
     def verify(self, block_service) -> bool:
         previous_block = block_service.get_block(self.previous_block_hash)
         return self.previous_block_hash == previous_block.compute_hash(previous_block)
 
 
-T = TypeVar('T')
-
-
-class BlockData(NamedTuple):
+class DataObject(NamedTuple):
     payload: T
     data_type = 'TYPE_GENERIC'
+
+    def compute_hash(self):
+        return NotImplemented
+
+    def verify(self):
+        return NotImplemented
 
     def as_dict(self) -> Dict[str, str]:
         return {
@@ -79,7 +68,7 @@ class BlockData(NamedTuple):
         return json.dumps(self.as_dict())
 
     @classmethod
-    def from_dict(cls, as_dict: Dict) -> BlockData:
+    def from_dict(cls, as_dict: Dict) -> DataObject:
         block = cls(payload=cls.payload_from_dict(as_dict['payload']), data_type=as_dict['data_type'])
         return block
 
@@ -88,10 +77,89 @@ class BlockData(NamedTuple):
         return NotImplemented
 
     @classmethod
-    def from_json(cls, as_json: str) -> BlockData:
-        pass
+    def from_json(cls, as_json: str) -> DataObject:
+        block = cls.from_dict(json.loads(as_json))
+        return block
 
 
-class ExampleData(BlockData):
-    payload: Dict[int, str]
-    data_type = 'TYPE_EXAMPLE'
+class NetworkEvent(DataObject):
+    payload: Dict[str, str]
+    data_type: str
+
+    @classmethod
+    def new_network_event(cls,
+                          public_key: str,
+                          host: str,
+                          port: str,
+                          event_type: str,
+                          private_key: rsa.RSAPrivateKey) -> NetworkEvent:
+        payload = {
+            'public_key': public_key,
+            'host': host,
+            'port': port,
+            'timestamp': str(time.time()),
+            'signature': str(signature.sign(public_key + host + port, private_key), 'utf8')
+        }
+        return cls(payload, event_type)
+
+    @classmethod
+    def new_connect_event(cls,
+                          public_key: str,
+                          host: str,
+                          port: str,
+                          private_key: rsa.RSAPrivateKey) -> NetworkEvent:
+        return cls.new_network_event(public_key, host, port, NETWORK_EVENT_CONNECT, private_key)
+
+    @classmethod
+    def new_disconnect_event(cls,
+                             public_key: str,
+                             host: str,
+                             port: str,
+                             private_key: rsa.RSAPrivateKey) -> NetworkEvent:
+        return cls.new_network_event(public_key, host, port, NETWORK_EVENT_DISCONNECT, private_key)
+
+    @classmethod
+    def new_keep_alive_event(cls,
+                             public_key,
+                             host: str,
+                             port: str,
+                             private_key: rsa.RSAPrivateKey) -> NetworkEvent:
+        return cls.new_network_event(public_key, host, port, NETWORK_EVENT_KEEP_ALIVE, private_key)
+
+    def verify(self):
+        pub_key = self.payload['public_key']
+        sig = self.payload['signature']
+        msg = pub_key + self.payload['host'] + self.payload['port'] + self.payload['timestamp']
+        if signature.verify(msg, bytes(sig, 'utf8'), pub_key):
+            return VerificationSuccess(result_code=SIGNATURE_OK, message='signature matches key-pair')
+        return VerificationFailed(result_code=SIGNATURE_NOK, message='signature does not match key-pair')
+
+    def compute_hash(self):
+        return signature.compute_hash(''.join(self.payload.values()))
+
+    def payload_as_dict(self):
+        return self.payload
+
+    @staticmethod
+    def payload_from_dict(payload: Dict[str, str]) -> T:
+        return {
+            'public_key': payload['public_key'],
+            'host': payload['host'],
+            'port': payload['port'],
+            'signature': payload['signature']
+        }
+
+
+class VerificationResult(NamedTuple):
+    result_code: str
+    message: str
+
+
+class VerificationSuccess(VerificationResult):
+    def __bool__(self):
+        return True
+
+
+class VerificationFailed(VerificationResult):
+    def __bool__(self):
+        return False
