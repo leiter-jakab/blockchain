@@ -89,28 +89,29 @@ class DataObject(NamedTuple):
 
 class NetworkEvent(DataObject):
     payload: Dict[str, str]
-    topic: str = TOPIC_NETWORK_EVENT
 
     @classmethod
     def new_network_event(cls,
-                          public_key: str,
+                          public_key: rsa.RSAPublicKey,
                           host: str,
                           port: str,
                           event_type: str,
                           private_key: rsa.RSAPrivateKey) -> NetworkEvent:
+        public_key = signature.serialize_public_key_as_hex(public_key)
+        timestamp = str(time.time())
         payload = {
             'public_key': public_key,
             'host': host,
             'port': port,
             'event_type': event_type,
-            'timestamp': str(time.time()),
-            'signature': str(signature.sign(public_key + host + port, private_key), 'utf8')
+            'timestamp': timestamp,
+            'signature': signature.sign_as_hex(public_key + host + port + event_type + timestamp, private_key)
         }
-        return cls(payload)
+        return cls(payload, TOPIC_NETWORK_EVENT)
 
     @classmethod
     def new_connect_event(cls,
-                          public_key: str,
+                          public_key: rsa.RSAPublicKey,
                           host: str,
                           port: str,
                           private_key: rsa.RSAPrivateKey) -> NetworkEvent:
@@ -118,7 +119,7 @@ class NetworkEvent(DataObject):
 
     @classmethod
     def new_disconnect_event(cls,
-                             public_key: str,
+                             public_key: rsa.RSAPublicKey,
                              host: str,
                              port: str,
                              private_key: rsa.RSAPrivateKey) -> NetworkEvent:
@@ -126,7 +127,7 @@ class NetworkEvent(DataObject):
 
     @classmethod
     def new_keep_alive_event(cls,
-                             public_key,
+                             public_key: rsa.RSAPublicKey,
                              host: str,
                              port: str,
                              private_key: rsa.RSAPrivateKey) -> NetworkEvent:
@@ -135,8 +136,11 @@ class NetworkEvent(DataObject):
     def verify(self):
         pub_key = self.payload['public_key']
         sig = self.payload['signature']
-        msg = pub_key + self.payload['host'] + self.payload['port'] + self.payload['timestamp'] + self.payload['event_type']
-        if signature.verify(msg, bytes(sig, 'utf8'), pub_key):
+        msg = ''.join([pub_key, self.payload['host'],
+                       self.payload['port'],
+                       self.payload['event_type'],
+                       self.payload['timestamp']])
+        if signature.verify_hex(msg, sig, signature.load_public_key_from_hex(pub_key)):
             return VerificationSuccess(result_code=SIGNATURE_OK, message='signature matches key-pair')
         return VerificationFailed(result_code=SIGNATURE_NOK, message='signature does not match key-pair')
 
