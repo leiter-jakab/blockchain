@@ -1,8 +1,7 @@
 from __future__ import annotations
-# from dataclasses import dataclass, replace
 from typing import Tuple, Union, NamedTuple, TYPE_CHECKING
 from decimal import Decimal
-from ..blockchain import signature
+from ..blockchain import signing
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 
@@ -115,9 +114,9 @@ VERIFIED = 'VERIFIED'
 #
 #         return rep
 Amount = Union[int, float, Decimal]
-Input = Tuple[bytes, Amount, bytes]
+Input = Tuple[bytes, Amount, str]
 Output = Tuple[bytes, Amount]
-ArbiterSig = Tuple[bytes, bytes]
+ArbiterSig = Tuple[bytes, str]
 
 
 class Transaction(NamedTuple):
@@ -127,12 +126,12 @@ class Transaction(NamedTuple):
 
 
 def add_input(tra: Transaction, from_address: RSAPublicKey, amount: Amount) -> Transaction:
-    return tra._replace(inputs=tra.inputs + ((signature.serialize_public_key(from_address), amount, b''),))
+    return tra._replace(inputs=tra.inputs + ((signing.serialize_public_key(from_address), amount, b''),))
 
 
 def add_output(tra: Transaction, to_address: RSAPublicKey, amount: Amount) -> Transaction:
-    return tra._replace(outputs=tra.outputs + ((signature.serialize_public_key(to_address), amount),))
+    return tra._replace(outputs=tra.outputs + ((signing.serialize_public_key(to_address), amount),))
 
 
 def add_required(tra: Transaction, arbiter_address: RSAPublicKey) -> Transaction:
-    return tra._replace(required=tra.required + ((signature.serialize_public_key(arbiter_address), b''),))
+    return tra._replace(required=tra.required + ((signing.serialize_public_key(arbiter_address), b''),))

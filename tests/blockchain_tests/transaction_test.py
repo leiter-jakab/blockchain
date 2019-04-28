@@ -1,7 +1,7 @@
 import pytest
 from assertpy import assert_that
 from blockchain.cryptocurrency.transaction import Transaction
-from blockchain.signature import generate_keys, serialize_public_key
+from blockchain.signing import generate_keys, serialize_public_key
 
 
 @pytest.fixture()

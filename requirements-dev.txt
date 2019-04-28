@@ -4,4 +4,4 @@ pytest
 pytest-mock
 pytest-cov
 assertpy
-jupyter
+jupyterlab
