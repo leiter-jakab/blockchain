@@ -1,15 +1,15 @@
 from __future__ import annotations
 import json
-from typing import Optional, Tuple, Dict, NamedTuple, TypeVar, Union, TYPE_CHECKING
+from typing import Optional, Tuple, List, Dict, NamedTuple, Union, TYPE_CHECKING
 from . import signing
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric import rsa
 
-T = TypeVar('T')
-
 # block constants
 NONCE_ACCEPTED = 'NONCE_ACCEPTED'
 NONCE_REJECTED = 'NONCE_ERROR'
+NONCE_OK = 'NONCE_OK'
+NONCE_NOK = 'NONCE_NOK'
 BLOCK_OK = 'BLOCK_OK'
 BLOCK_NOK = 'BLOCK_NOK'
 
@@ -53,18 +53,20 @@ class Block(NamedTuple):
 
     def verify_nonce(self, nonce: str) -> VerificationResult:
         n = 2
-        return signing.compute_hash(self.compute_hash() + nonce).startswith(bytes(n))
+        if signing.compute_hash(self.compute_hash() + nonce).startswith(bytes(n)):
+            return VerificationResult.succeed(NONCE_OK, 'nonce produced expected hash')
+        return VerificationResult.fail(NONCE_NOK, 'nonce does not produce expected hash')
 
     def verify(self, block_service) -> VerificationResult:
         previous_block = block_service.get_block(self.previous_block_hash)
         if self.previous_block_hash == previous_block.compute_hash(previous_block):
-            return VerificationResult.succeed(BLOCK_OK, '')
-        return VerificationResult.fail()
+            return VerificationResult.succeed(BLOCK_OK, 'previous block and hash matching')
+        return VerificationResult.fail(BLOCK_NOK, 'previous block and hash not matching')
 
 
 class DataObject(NamedTuple):
-    payload: T
     topic: str
+    payload: NamedTuple
 
     def compute_hash(self) -> str:
         return NotImplemented
@@ -78,7 +80,7 @@ class DataObject(NamedTuple):
             'payload': self.payload_as_dict()
         }
 
-    def payload_as_dict(self) -> Dict[str, str]:
+    def payload_as_dict(self) -> Dict[str, Union[str, int, float, List, Dict]]:
         return NotImplemented
 
     def as_json(self) -> str:
@@ -86,11 +88,11 @@ class DataObject(NamedTuple):
 
     @classmethod
     def from_dict(cls, as_dict: Dict) -> DataObject:
-        block = cls(payload=cls.payload_from_dict(as_dict['payload']), topic=as_dict['topic'])
+        block = cls(topic=as_dict['topic'], payload=cls.payload_from_dict(as_dict['payload']))
         return block
 
     @staticmethod
-    def payload_from_dict(payload: Dict[str, str]) -> T:
+    def payload_from_dict(payload: Dict[str, Union[str, int, float, List, Dict]]) -> NamedTuple:
         return NotImplemented
 
     @classmethod
