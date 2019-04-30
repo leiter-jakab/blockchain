@@ -1,14 +1,11 @@
 from __future__ import annotations
-from typing import Tuple, Union, NamedTuple, TYPE_CHECKING
+from typing import Tuple, Dict, List, Union, NamedTuple, TYPE_CHECKING
 from decimal import Decimal
-from ..blockchain import signing
+from .blockchain import DataObject, VerificationResult
+from . import crypt
 if TYPE_CHECKING:
-    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+    from cryptography.hazmat.primitives.asymmetric import rsa
 
-SIGNING_ERROR = 'SIGNING_ERROR'
-TRANSACTION_ERROR = 'TRANSACTION_ERROR'
-SIGNED = 'SIGNED'
-VERIFIED = 'VERIFIED'
 
 
 # @dataclass(frozen=True)
@@ -113,25 +110,132 @@ VERIFIED = 'VERIFIED'
 #             rep += f'  - {get_addr(addr)} {"| signed" if sig else ""}\n'
 #
 #         return rep
-Amount = Union[int, float, Decimal]
-Input = Tuple[bytes, Amount, str]
-Output = Tuple[bytes, Amount]
-ArbiterSig = Tuple[bytes, str]
+
+# transaction constants
+TOPIC_TRANSACTIONS = 'TOPIC_TRANSACTIONS'
+TRANSACTION_ERROR = 'TRANSACTION_ERROR'
+TRANSACTION_SIGNING_ERROR = 'TRANSACTION_SIGNING_ERROR'
+TRANSACTION_SIGNED = 'TRANSACTION_SIGNED'
+TRANSACTION_VERIFIED = 'TRANSACTION_VERIFIED'
+
+
+class Input(NamedTuple):
+    from_address: str
+    amount: str
+    signature: str
+
+    @classmethod
+    def new_input(cls, from_address: rsa.RSAPublicKey, amount: Union[int, float, Decimal]) -> Input:
+        from_address = crypt.serialize_public_key_as_hex(from_address)
+        amount = str(amount)
+        return cls(from_address, amount, '')
+
+    def get_digest(self):
+        return self.from_address + self.amount
+
+
+class Output(NamedTuple):
+    to_address: str
+    amount: Union[int, float, Decimal]
+
+    @classmethod
+    def new_output(cls, to_address: rsa.RSAPublicKey, amount: Union[int, float, Decimal]) -> Output:
+        to_address = crypt.serialize_public_key_as_hex(to_address)
+        amount = str(amount)
+        return cls(to_address, amount)
+
+    def get_digest(self):
+        return self.to_address + self.amount
+
+
+class Arbiter(NamedTuple):
+    address: str
+    signature: str
+
+    @classmethod
+    def new_arbiter(cls, address: rsa.RSAPublicKey) -> Arbiter:
+        address = crypt.serialize_public_key_as_hex(address)
+        return cls(address, '')
+
+    def get_digest(self):
+        return self.address
 
 
 class Transaction(NamedTuple):
-    inputs: Tuple[Input, ...] = ()
-    outputs: Tuple[Output, ...] = ()
-    required: Tuple[ArbiterSig, ...] = ()
+    input: Input
+    output: Output
+    unit: str
+    arbiters: Tuple[Arbiter, ...]
+
+    @classmethod
+    def new_transaction(cls,
+                        from_address: rsa.RSAPublicKey,
+                        to_address: rsa.RSAPublicKey,
+                        amount: Union[float, int, Decimal],
+                        unit: str,
+                        arbiter_addresses: Tuple[rsa.RSAPublicKey, ...]) -> Transaction:
+        inp = Input.new_input(from_address, amount)
+        outp = Output.new_output(to_address, amount)
+        arbs = tuple([Arbiter.new_arbiter(addr) for addr in arbiter_addresses])
+        return cls(input=inp, output=outp, arbiters=arbs, unit=unit)
+
+    def sign(self, private_key: rsa.RSAPrivateKey) -> VerificationResult:
+        for i, v in enumerate(self.inputs):
+            addr, amount, sig = v
+            if addr == signature.serialize_public_key(private_key.public_key()):
+                if sig:
+                    return self,  SIGNING_ERROR, 'transaction already signed by this private key'
+                signed_input = (addr, amount, signature.sign(self.compute_hash(), private_key))
+                new_inputs = self.inputs[:i] + (signed_input,) + self.inputs[i+1:]
+                return replace(self, inputs=new_inputs), SIGNED, 'transaction signed'
+
+        for i, v in enumerate(self.required):
+            addr, sig = v
+            if addr == signature.serialize_public_key(private_key.public_key()):
+                if sig:
+                    return self, SIGNING_ERROR, 'transaction already signed by this private key'
+                required_sig = (addr, signature.sign(self.compute_hash(), private_key))
+                new_required = self.required[:i] + (required_sig,) + self.required[i+1:]
+                return replace(self, required=new_required), SIGNED, 'transaction signed'
+
+        return self, SIGNING_ERROR, 'not a valid signer'
+
+    def verify(self) -> VerificationResult:
+        pass
+
+    def compute_hash(self) -> str:
+        digest = ''.join([self.input.get_digest(),
+                          self.output.get_digest(),
+                          ''.join([arb.get_digest() for arb in self.arbiters])])
+        return crypt.compute_hash_as_hex(digest)
 
 
-def add_input(tra: Transaction, from_address: RSAPublicKey, amount: Amount) -> Transaction:
-    return tra._replace(inputs=tra.inputs + ((signing.serialize_public_key(from_address), amount, b''),))
+class TransactionEvent(DataObject):
+    payload: Tuple[Transaction, ...]
 
+    @classmethod
+    def new_transactions(cls, transactions: Tuple[Transaction, ...]) -> TransactionEvent:
+        return cls(topic=TOPIC_TRANSACTIONS, payload=transactions)
 
-def add_output(tra: Transaction, to_address: RSAPublicKey, amount: Amount) -> Transaction:
-    return tra._replace(outputs=tra.outputs + ((signing.serialize_public_key(to_address), amount),))
+    @classmethod
+    def new_transaction(cls, transaction: Transaction) -> TransactionEvent:
+        return cls.new_transactions((transaction,))
 
+    def add_transactions(self, transactions: Tuple[Transaction, ...]) -> TransactionEvent:
+        return self._replace(payload=self.payload + transactions)
 
-def add_required(tra: Transaction, arbiter_address: RSAPublicKey) -> Transaction:
-    return tra._replace(required=tra.required + ((signing.serialize_public_key(arbiter_address), b''),))
+    def add_transaction(self, transaction: Transaction) -> TransactionEvent:
+        return  self.add_transactions((transaction,))
+
+    def verify(self) -> VerificationResult:
+        pass
+
+    def compute_hash(self) -> str:
+        pass
+
+    def payload_as_dict(self) -> Dict[str, Union[str, int, float, List, Dict]]:
+        pass
+
+    @staticmethod
+    def payload_from_dict(payload: Dict[str, Union[str, int, float, List, Dict]]) -> Transaction:
+        pass

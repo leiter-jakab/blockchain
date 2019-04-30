@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 from typing import Optional, Tuple, List, Dict, NamedTuple, Union, TYPE_CHECKING
-from . import signing
+from . import crypt
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -42,18 +42,18 @@ class Block(NamedTuple):
 
     def compute_hash(self) -> str:
         data_hash = ''.join([db.compute_hash() for db in self.data])
-        return signing.compute_hash_as_hex(data_hash + self.previous_block_hash)
+        return crypt.compute_hash_as_hex(data_hash + self.previous_block_hash)
 
     def add_nonce(self, address: rsa.RSAPublicKey, nonce: str) -> VerificationResult:
         if not self.verify_nonce(nonce):
             return VerificationFailure(NONCE_REJECTED, 'nonce does not produce expected hash')
-        address = signing.serialize_public_key_as_hex(address)
+        address = crypt.serialize_public_key_as_hex(address)
         block_with_nonce = self._replace(nonce=nonce)
         return VerificationResult.succeed(NONCE_ACCEPTED, 'nonce produced expected hash', block_with_nonce)
 
     def verify_nonce(self, nonce: str) -> VerificationResult:
         n = 2
-        if signing.compute_hash(self.compute_hash() + nonce).startswith(bytes(n)):
+        if crypt.compute_hash(self.compute_hash() + nonce).startswith(bytes(n)):
             return VerificationResult.succeed(NONCE_OK, 'nonce produced expected hash')
         return VerificationResult.fail(NONCE_NOK, 'nonce does not produce expected hash')
 
